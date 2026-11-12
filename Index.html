@@ -1,0 +1,112 @@
+<!DOCTYPE html><html lang="vi"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Túi PE xếp hông – mô hình 3D</title>
+<style>
+:root{--bg:#f4f1ea;--fg:#222;--card:#fff;--bd:#d8d2c4;--f:#c8642a;--g:#1f7a8c;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#1d1b18;--fg:#eee;--card:#2a2723;--bd:#443f37;--f:#e0824a;--g:#3fb0c4}}
+:root[data-theme="dark"]{--bg:#1d1b18;--fg:#eee;--card:#2a2723;--bd:#443f37;--f:#e0824a;--g:#3fb0c4}
+html,body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.5 system-ui,sans-serif}
+.w{max-width:980px;margin:0 auto;padding:12px}
+h1{font-size:18px;margin:4px 0 8px}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:10px;padding:10px;margin-bottom:10px}
+#v{height:400px;padding:0;position:relative;overflow:hidden;touch-action:none}
+#v canvas{width:100%;height:100%;display:block}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:8px}
+button{font:inherit;padding:6px 10px;border:1px solid var(--bd);border-radius:8px;background:var(--card);color:var(--fg);cursor:pointer}
+button.on{background:var(--g);color:#fff;border-color:var(--g)}
+input[type=range]{flex:1;min-width:140px}
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:10px}@media(max-width:640px){.g2{grid-template-columns:1fr}}
+.cyl{border:2px dashed var(--bd);padding:6px 0;margin:6px 0}
+.film{display:flex;margin:0 auto}.film i{height:22px;display:block}.film i:nth-child(odd){background:var(--g)}.film i:nth-child(2){background:var(--f)}
+.k{display:inline-block;width:10px;height:10px;border-radius:2px;margin:0 4px 0 10px}
+small{opacity:.75}
+</style></head><body><div class="w">
+<h1>Túi PE xếp hông – mô hình 3D (kéo để xoay, cuộn/chụm để zoom)</h1>
+<div class="card" id="v"></div>
+<div class="card">
+ <div class="row" id="sz"></div>
+ <div class="row"><span>Gấp phẳng</span><input type="range" id="op" min="0" max="100" value="60"><span>Mở hết (hình sau khi nở)</span></div>
+ <div class="row"><label><input type="checkbox" id="cs"> Hiện tấm mụn dừa</label><label><input type="checkbox" id="cl"> Ẩn nửa trên (xem mặt trong hông)</label>
+ <span><span class="k" style="background:#1b8a3a"></span>chữ in JM coco ở 2 hông (tâm chữ = nếp gấp hông); mặt trước/sau không in</span></div>
+</div>
+<div class="g2">
+ <div class="card"><b>Mặt cắt ngang</b><br><canvas id="sec" width="260" height="170" style="width:100%;max-width:260px"></canvas></div>
+ <div class="card"><b>Một lớp màng layflat (nếp hông ở 2 mép)</b><div class="cyl"><div class="film" id="fb"></div></div><div id="info"></div></div>
+</div>
+<small>Theo bản vẽ in rev. 10/11/2026: chỉ in 2 hông, chữ JM coco (xanh Pantone 356 C đề xuất), tâm chữ trùng nếp gấp hông, in liên tục bước lặp 25 cm, mặt trước/sau không in. Màng ngoài trắng, trong đen; mặt trên đục lỗ trồng vuông 10×10 theo bản vẽ đục lỗ, mặt dưới đục lỗ thoát tròn Ø2, số lỗ bằng số lỗ trồng, nằm đúng dưới từng lỗ trồng (đường kính là giả định). Giả định: in mặt ngoài màng nên khi túi xẹp chữ nằm trong nếp gấp hông, lộ ra khi túi nở.</small>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+const S={1:{t:'Túi 1: 15+5+5 × 112',g:5,L:112,Ls:100,E:6,c0:18.5,sl:'100×15×10',ty:'Type 1'},2:{t:'Túi 2: 15+5+5 × 102',g:5,L:102,Ls:90,E:6,c0:26,sl:'90×15×10',ty:'Type 2 & 3'},3:{t:'Túi 3: 15+3.75+3.75 × 100',g:3.75,L:100,Ls:90,E:5,c0:25,sl:'90×15×7.5',ty:'Type 4'}};
+let cur=1,op=.6,M=80,geo,mesh,slab,mat,mat2;
+const box=document.getElementById('v');
+const R=new THREE.WebGLRenderer({antialias:true,alpha:true});R.localClippingEnabled=true;R.setPixelRatio(devicePixelRatio);box.appendChild(R.domElement);
+const sc=new THREE.Scene(),cam=new THREE.PerspectiveCamera(40,1,1,1000);
+sc.add(new THREE.AmbientLight(0xffffff,.7));const dl=new THREE.DirectionalLight(0xffffff,.8);dl.position.set(60,120,80);sc.add(dl);
+const pl=new THREE.Plane(new THREE.Vector3(0,-1,0),.05);
+let th=.9,ph=1.0,r=170;
+function cm(){cam.position.set(r*Math.sin(ph)*Math.sin(th),r*Math.cos(ph),r*Math.sin(ph)*Math.cos(th));cam.lookAt(0,0,0)}
+function rs(){const w=box.clientWidth,h=box.clientHeight;R.setSize(w,h);cam.aspect=w/h;cam.updateProjectionMatrix();draw()}
+function prof(g,t){const Y=g*Math.sin(t)+.25,d=g*Math.cos(t),h=7.5;return[[-h,Y],[h,Y],[h-d,0],[h,-Y],[-h,-Y],[-h+d,0]]}
+const sm=t=>{t=Math.max(0,Math.min(1,t));return t*t*(3-2*t)};
+function tex(g,L){const k=28,tot=30+4*g,c=document.createElement('canvas');c.width=Math.round(tot*k);c.height=Math.round(L*k);const x=c.getContext('2d');
+ x.fillStyle='#f4f4f0';x.fillRect(0,0,c.width,c.height);
+ const s=S[cur];x.fillStyle='#1b8a3a';x.textAlign='center';x.textBaseline='middle';
+ [[(15+g)*k,[0,1,1,0]],[(30+3*g)*k,[0,-1,-1,0]]].forEach(([X,m])=>{for(let z=s.c0;z+5.6<=L;z+=25){x.save();x.transform(m[0],m[1],m[2],m[3],X,(L-z)*k);
+  x.font='bold '+1.92*k+'px Arial,sans-serif';x.fillText('JM coco',0,-.85*k);x.font='bold '+1.12*k+'px Arial,sans-serif';x.fillText('010 9780 7494',0,.95*k);x.restore()}});
+ let nm=0;for(let z=s.c0;z+5.6<=L;z+=25)nm++;const zc=s.c0+25*Math.floor((nm-1)/2)+12.5;x.strokeStyle='#d01818';x.lineWidth=.05*k;[15+g,15+3*g].forEach(u=>{const X=u*k,Y=(L-zc)*k,h=.25*k;x.beginPath();x.moveTo(X-h,Y);x.lineTo(X+h,Y);x.moveTo(X,Y-h);x.lineTo(X,Y+h);x.stroke()});
+ x.globalCompositeOperation='destination-out';x.fillStyle='#000';
+ const pc=s.ty=='Type 1'?[12.5,27.5,42.5,57.5,72.5,87.5]:[15,45,75];
+ pc.forEach(m=>x.fillRect(2.5*k,(L-s.E-m-5)*k,10*k,10*k));
+ pc.forEach(m=>{x.beginPath();x.arc((22.5+2*g)*k,(L-s.E-m)*k,1*k,0,7);x.fill()});x.globalCompositeOperation='source-over';
+ const t=new THREE.CanvasTexture(c);t.anisotropy=4;return t}
+function texOld(g,L){const k=14,tot=30+4*g,c=document.createElement('canvas');c.width=Math.round(tot*k);c.height=Math.round(L*k);const x=c.getContext('2d');
+ x.fillStyle='rgba(225,232,236,.35)';x.fillRect(0,0,c.width,c.height);
+ const cs=getComputedStyle(document.documentElement),F=cs.getPropertyValue('--f').trim()||'#c8642a',G=cs.getPropertyValue('--g').trim()||'#1f7a8c';
+ let s=0;[[15,F],[g,G],[g,G],[15,F],[g,G],[g,G]].forEach(([w,col])=>{const X=s*k,W=w*k;x.fillStyle=col;x.globalAlpha=.92;x.fillRect(X+4,4,W-8,c.height-8);x.globalAlpha=1;
+  x.fillStyle='#fff';x.font='bold '+Math.min(W*.5,26)+'px sans-serif';x.textAlign='center';x.textBaseline='middle';
+  for(let y=14*k;y<c.height;y+=28*k){x.save();x.translate(X+W/2,y);x.rotate(-Math.PI/2);x.fillText('JM COCO',0,0);x.restore()}s+=w});
+ const t=new THREE.CanvasTexture(c);t.anisotropy=4;return t}
+function build(){const s=S[cur];if(mesh){sc.remove(mesh);sc.remove(slab);geo.dispose()}
+ geo=new THREE.BufferGeometry();const n=(M+1)*7,uv=[],id=[],cum=[0,15,15+s.g,15+2*s.g,30+2*s.g,30+3*s.g,30+4*s.g];
+ for(let j=0;j<=M;j++)for(let i=0;i<7;i++)uv.push(cum[i]/cum[6],j/M);
+ for(let j=0;j<M;j++)for(let i=0;i<6;i++){const a=j*7+i,b=a+1,c=a+7,d=c+1;id.push(a,c,b,b,c,d)}
+ geo.setAttribute('position',new THREE.BufferAttribute(new Float32Array(n*3),3));geo.setAttribute('uv',new THREE.Float32BufferAttribute(uv,2));geo.setIndex(id);
+ const T=tex(s.g,s.L);mat=new THREE.MeshPhongMaterial({map:T,side:THREE.FrontSide,flatShading:true,shininess:25,alphaTest:.5});mat2=new THREE.MeshPhongMaterial({map:T,color:0x111111,side:THREE.BackSide,flatShading:true,alphaTest:.5});
+ mesh=new THREE.Group();mesh.add(new THREE.Mesh(geo,mat),new THREE.Mesh(geo,mat2));sc.add(mesh);
+ slab=new THREE.Mesh(new THREE.BoxGeometry(15,2*s.g,s.Ls),new THREE.MeshPhongMaterial({color:0x7a4e2a,transparent:true,opacity:.6}));sc.add(slab);
+ upd()}
+function upd(){const s=S[cur],a=geo.attributes.position;let k=0;
+ for(let j=0;j<=M;j++){const z=s.L*j/M,t=op*Math.PI/2*sm(Math.min(z,s.L-z)/s.E),p=prof(s.g,t);for(let i=0;i<=6;i++){const q=p[i%6];a.setXYZ(k++,q[0],q[1],z-s.L/2)}}
+ a.needsUpdate=true;geo.computeVertexNormals();geo.computeBoundingSphere();
+ slab.visible=document.getElementById('cs').checked;slab.scale.y=Math.max(op,.05);
+ [mat,mat2].forEach(m=>{m.clippingPlanes=document.getElementById('cl').checked?[pl]:[];m.needsUpdate=true});draw();sec()}
+function draw(){cm();R.render(sc,cam)}
+function sec(){const s=S[cur],c=document.getElementById('sec'),x=c.getContext('2d'),k=8,cs=getComputedStyle(document.documentElement);
+ x.clearRect(0,0,c.width,c.height);const p=prof(s.g,op*Math.PI/2),F=cs.getPropertyValue('--f'),G=cs.getPropertyValue('--g');
+ x.lineWidth=3;x.lineCap='round';const P=i=>[130+p[i%6][0]*k,85-p[i%6][1]*k];
+ for(let i=0;i<6;i++){x.strokeStyle=(i%3==0)?F:'#1b8a3a';x.beginPath();x.moveTo(...P(i));x.lineTo(...P(i+1));x.stroke()}
+ x.fillStyle=cs.getPropertyValue('--fg');x.font='12px sans-serif';x.textAlign='center';x.fillText('15',130,14);x.fillText('hông '+s.g+' (2 tấm)',130,162);
+ x.fillText('cao khi mở = '+2*s.g,130,30)}
+function info(){const s=S[cur],g=s.g,W=15+2*g,cl=+((2*g-3.6)/2).toFixed(2);let n=0;for(let z=s.c0;z+5.6<=s.L;z+=25)n++;
+ const f=document.getElementById('fb');f.style.width='100%';
+ f.innerHTML=`<i style="flex:1.8;background:#1b8a3a"></i><i style="flex:${g-1.8};background:var(--bd)"></i><i style="flex:15;background:var(--card);border:1px solid var(--bd)"></i><i style="flex:${g-1.8};background:var(--bd)"></i><i style="flex:1.8;background:#1b8a3a"></i>`;
+ document.getElementById('info').innerHTML=`<b>${s.t}</b> (${s.ty})<br>Khổ màng = 15+${g}+${g} = <b>${W} cm</b> · sau khi nở 15×${2*g} · dài túi ${s.L} (2 đầu gấp ${s.E} cm bị che)<br>Tấm mụn dừa ${s.sl}<br>Chữ 3.6 × 11.2 cm, tâm chữ = nếp hông, chừa mỗi bên <b>${cl} cm</b> (hông cao ${2*g})<br>In liên tục, bước lặp 25 cm, <b>${n} dấu/hông</b>, dấu đầu cách đầu túi ${s.c0} cm<br><span style="color:#d01818"><b>+</b></span> Dấu cộng 5×5 mm: 1 dấu trên nếp gấp giữa hông phải (cách biên ngoài ${g} cm), 1 dấu trên mặt đáy cách cùng biên ${g} cm → khi xẹp trùng nhau; nằm giữa 2 chữ, cách đầu túi ${s.c0+25*Math.floor((n-1)/2)+12.5} cm; hông trái không có`}
+function infoOld(){const s=S[cur],g=s.g,W=15+2*g,d=(v)=>(v>0?'+':'')+v;
+ document.getElementById('fb').style.width=(W/25*100)+'%';document.getElementById('fb').innerHTML=`<i style="flex:${g}"></i><i style="flex:15"></i><i style="flex:${g}"></i>`;
+ document.getElementById('info').innerHTML=`<b>${s.t}</b><br>Khổ màng (layflat) = 15+${g}+${g} = <b>${W} cm</b> (chu vi ${2*W})<br>Sau khi nở: rộng 15 × cao ${2*g} cm · dài túi ${s.L} cm<br>Tấm mụn dừa theo bản vẽ: ${s.sl}<br>So với trục in 25×112: rộng <b>${d(W-25)} cm</b>, dài <b>${d(s.L-112)} cm</b>`}
+const sz=document.getElementById('sz');Object.keys(S).forEach(k=>{const b=document.createElement('button');b.textContent=S[k].t;b.onclick=()=>{cur=+k;[...sz.children].forEach(c=>c.classList.remove('on'));b.classList.add('on');build();info()};sz.appendChild(b)});
+sz.children[0].classList.add('on');
+document.getElementById('op').oninput=e=>{op=e.target.value/100;upd()};
+['cs','cl'].forEach(i=>document.getElementById(i).onchange=upd);
+const ps=new Map();let pd=0;
+box.addEventListener('pointerdown',e=>{box.setPointerCapture(e.pointerId);ps.set(e.pointerId,[e.clientX,e.clientY]);pd=0});
+box.addEventListener('pointerup',e=>ps.delete(e.pointerId));box.addEventListener('pointercancel',e=>ps.delete(e.pointerId));
+box.addEventListener('pointermove',e=>{if(!ps.has(e.pointerId))return;const o=ps.get(e.pointerId);
+ if(ps.size==1){th-=(e.clientX-o[0])*.008;ph=Math.max(.15,Math.min(3,ph-(e.clientY-o[1])*.008))}
+ ps.set(e.pointerId,[e.clientX,e.clientY]);
+ if(ps.size==2){const [a,b]=[...ps.values()],dd=Math.hypot(a[0]-b[0],a[1]-b[1]);if(pd)r=Math.max(40,Math.min(400,r*pd/dd));pd=dd}draw()});
+box.addEventListener('wheel',e=>{e.preventDefault();r=Math.max(40,Math.min(400,r*(1+e.deltaY*.001)));draw()},{passive:false});
+addEventListener('resize',rs);matchMedia('(prefers-color-scheme:dark)').addEventListener('change',()=>{build();info()});
+rs();build();info();
+</script></body></html>
